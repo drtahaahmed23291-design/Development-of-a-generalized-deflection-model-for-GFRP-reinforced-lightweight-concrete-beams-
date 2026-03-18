@@ -147,7 +147,7 @@ div[data-testid="stCheckbox"] input[type="checkbox"] {
 # ===============================
 # Title
 # ===============================
-st.title("Robust Predictive Modeling of Deflection in GFRP-Reinforced Lightweight Concrete Beams")
+st.title("Development of a generalized deflection model for GFRP reinforced lightweight concrete beams with different shapes")
 st.markdown(
     "by Nady M. Abdel-Fattah, Taha A. Fesekh, Ehab M. Lotfy, Erfan Abdel-Latif, "
     "and Abdel-Rahman M. Naguib"
