@@ -161,33 +161,37 @@ def compute_section_and_deflection(params):
     Deterministic calculations and section properties.
     Returns a dict with key results.
     """
-    (section_type, Pa, X, L, fc, Ef, Af, rho_f, rho_fb, d, d_prime, b,
+    (section_type, Pa, X, L, fc, wc, Ef, Af, rho_f, rho_fb, d, d_prime, b,
      y1, B, y2, t, Es) = params
 
     # Concrete modulus
-    Ec = 4700 * (fc ** 0.5)
+    Ec = 0.043 * (wc ** 1.5) * (fc ** 0.5)
     nf = Ef / Ec if Ec != 0 else 0
 
-    # beta_d = 0.05 (rho_f / rho_fb) (Ef/Es + 1), capped at 0.5
+    # beta_d = 0.06 (rho_f / rho_fb) (Ef/Es + 1), capped at 0.5
     if rho_fb != 0 and Es != 0:
-        beta_raw = 0.05 * (rho_f / rho_fb) * (Ef / Es + 1)
+        beta_raw = 0.06 * (rho_f / rho_fb) * (Ef / Es + 1)
     else:
         beta_raw = 0.50
     beta_d = min(beta_raw, 0.50)
 
-    # alpha_c (replacing lambda_e)
-    if d != 0 and d_prime != 0:
-        Xd_ratio = X / d
+    # alpha_c calculation
+    # s = X / d, r = d_prime / d
+    if d != 0:
+        s_ratio = X / d
+        cover_ratio = d_prime / d
         alpha_c = (
-            -3.52
-            + 0.0793 * Xd_ratio
-            + 0.0893 * d_prime
-            + 62.5 / d_prime
-            + 0.029 * (Xd_ratio ** 2)
-            - 0.0118 * Xd_ratio * d_prime
+            -4.989
+            + 167.4 * cover_ratio
+            - 1640.5 * (cover_ratio ** 2)
+            + 7388 * (cover_ratio ** 3)
+            - 11430 * (cover_ratio ** 4)
+            - 46.9 * s_ratio * (cover_ratio ** 2)
+            + 7.27 * (s_ratio ** 2) * (cover_ratio ** 2)
         )
     else:
-        Xd_ratio = 0
+        s_ratio = 0
+        cover_ratio = 0
         alpha_c = 0.55
 
     alpha_c = min(max(alpha_c, 0.55), 0.95)
@@ -297,14 +301,14 @@ section_type = st.selectbox("Section Type", ["T-section", "R-section"])
 # Default values
 if section_type == "T-section":
     default_Pa, default_X, default_L = 186.6, 750.0, 1900.0
-    default_fc, default_Ef, default_Af = 28.00, 50000.0, 314.0
+    default_fc, default_wc, default_Ef, default_Af = 28.00, 1850.0, 50000.0, 314.0
     default_rho_f, default_rho_fb = 0.57, 0.24
     default_d, default_d_prime = 275.0, 25.0
     default_b, default_y1, default_B, default_y2 = 200.0, 225.0, 600.0, 75.0
     default_t = None
 else:
     default_Pa, default_X, default_L = 166.94, 750.0, 1900.0
-    default_fc, default_Ef, default_Af = 28.00, 50000.0, 314.0
+    default_fc, default_wc, default_Ef, default_Af = 28.00, 1850.0, 50000.0, 314.0
     default_rho_f, default_rho_fb = 0.57, 0.24
     default_d, default_d_prime = 275.0, 25.0
     default_b, default_t = 200.0, 300.0
@@ -320,6 +324,12 @@ with col3:
     L = st.number_input("Beam Length L (mm)", value=default_L)
 with col4:
     fc = st.number_input("Concrete compressive strength f'c (MPa)", value=default_fc)
+
+col_wc1, col_wc2 = st.columns(2)
+with col_wc1:
+    wc = st.number_input("Concrete density wc (kg/m³)", value=default_wc)
+with col_wc2:
+    pass
 
 col5, col6, col7, col8 = st.columns(4)
 with col5:
@@ -392,7 +402,7 @@ else:
 # Deterministic computation
 # =========================
 params = (
-    section_type, Pa, X, L, fc, Ef, Af, rho_f, rho_fb,
+    section_type, Pa, X, L, fc, wc, Ef, Af, rho_f, rho_fb,
     d, d_prime, b,
     y1 if y1 is not None else 0.0,
     B if B is not None else 0.0,
@@ -479,7 +489,7 @@ if st.button("Run"):
         for i_sim in range(Nsim):
             p = (
                 section_type, float(Pa_s[i_sim]), X, L,
-                float(fc_s[i_sim]), float(Ef_s[i_sim]), float(Af_s[i_sim]),
+                float(fc_s[i_sim]), wc, float(Ef_s[i_sim]), float(Af_s[i_sim]),
                 rho_f, rho_fb, d, d_prime, b,
                 y1 if y1 is not None else 0.0,
                 B if B is not None else 0.0,
@@ -672,7 +682,8 @@ if st.session_state.show_log:
     fc_val = float(fc)
     Ef_val = float(Ef)
     Es_val = float(Es)
-    Ec_val = 4700 * (fc_val ** 0.5)
+    wc_val = float(wc)
+    Ec_val = 0.043 * (wc_val ** 1.5) * (fc_val ** 0.5)
     nf_val = Ef_val / Ec_val if Ec_val != 0 else 0
 
     if section_type == "T-section":
@@ -706,23 +717,26 @@ if st.session_state.show_log:
         )
 
     if rho_fb != 0 and Es_val != 0:
-        beta_raw_val = 0.05 * (rho_f / rho_fb) * (Ef_val / Es_val + 1)
+        beta_raw_val = 0.06 * (rho_f / rho_fb) * (Ef_val / Es_val + 1)
     else:
         beta_raw_val = 0.50
     beta_d_val = min(beta_raw_val, 0.50)
 
-    if d != 0 and d_prime != 0:
-        Xd_ratio = X / d
+    if d != 0:
+        s_ratio_val = X / d
+        cover_ratio_val = d_prime / d
         alpha_c_val = (
-            -3.52
-            + 0.0793 * Xd_ratio
-            + 0.0893 * d_prime
-            + 62.5 / d_prime
-            + 0.029 * (Xd_ratio ** 2)
-            - 0.0118 * Xd_ratio * d_prime
+            -4.989
+            + 167.4 * cover_ratio_val
+            - 1640.5 * (cover_ratio_val ** 2)
+            + 7388 * (cover_ratio_val ** 3)
+            - 11430 * (cover_ratio_val ** 4)
+            - 46.9 * s_ratio_val * (cover_ratio_val ** 2)
+            + 7.27 * (s_ratio_val ** 2) * (cover_ratio_val ** 2)
         )
     else:
-        Xd_ratio = 0
+        s_ratio_val = 0
+        cover_ratio_val = 0
         alpha_c_val = 0.55
     alpha_c_val = min(max(alpha_c_val, 0.55), 0.95)
 
@@ -755,7 +769,7 @@ if st.session_state.show_log:
         if (Ec_val != 0 and Ie_val != 0) else 0
     )
 
-    logs.append(f"1) Ec = 4700 * sqrt({fc_val}) = {Ec_val:.2f} MPa")
+    logs.append(f"1) Ec = 0.043 * wc^1.5 * sqrt(fc) = 0.043 * {wc_val}^1.5 * sqrt({fc_val}) = {Ec_val:.2f} MPa")
     logs.append(f"2) nf = Ef / Ec = {Ef_val} / {Ec_val:.2f} = {nf_val:.3f}")
     if section_type == "T-section":
         logs.append(f"3) Web area A1 = {b} * {y1} = {A1:.2f} mm²")
@@ -770,10 +784,10 @@ if st.session_state.show_log:
         logs.append(f"6) Ig = {Ig_val:.2f} mm⁴")
 
     logs.append(
-        f"8) βd (raw) = 0.05 * ({rho_f}/{rho_fb}) * (Ef/Es + 1) = {beta_raw_val:.3f} "
+        f"8) βd (raw) = 0.06 * ({rho_f}/{rho_fb}) * (Ef/Es + 1) = {beta_raw_val:.3f} "
         f"→ capped = {beta_d_val:.3f}"
     )
-    logs.append(f"9) α_c (capped 0.55–0.95) = {alpha_c_val:.3f}")
+    logs.append(f"9) α_c = {alpha_c_val:.3f} (0.55 ≤ α_c ≤ 0.95)")
     logs.append(f"10) Ma = (({Pa} × 1000) / 2) × {X} = {Ma_val:.2f} N·mm")
     logs.append(f"11) fr = 0.62 * sqrt({fc_val}) = {fr_val:.3f} MPa")
     logs.append(f"12) Mcr = fr * Ig / yt = {Mcr_val:.2f} N·mm")
